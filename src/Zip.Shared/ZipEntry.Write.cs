@@ -24,7 +24,7 @@
 // zip file.
 //
 // ------------------------------------------------------------------
-
+#define VERSION_NEEDED_BETTER
 
 using System;
 using System.IO;
@@ -74,6 +74,7 @@ namespace Ionic.Zip
 
             // workitem 11969: Version Needed To Extract in central directory must be
             // the same as the local entry or MS .NET System.IO.Zip fails read.
+#if !VERSION_NEEDED_BETTER
             Int16 vNeeded = (Int16)(VersionNeeded != 0 ? VersionNeeded : 20);
             // workitem 12964
             if (_OutputUsesZip64==null)
@@ -86,6 +87,9 @@ namespace Ionic.Zip
 #if BZIP
             if (this.CompressionMethod == Ionic.Zip.CompressionMethod.BZip2)
                 versionNeededToExtract = 46;
+#endif
+#else
+            Int16 versionNeededToExtract = this._VersionNeeded;
 #endif
 
             bytes[i++] = (byte)(versionNeededToExtract & 0x00FF);
@@ -939,12 +943,39 @@ namespace Ionic.Zip
             // for PK encryption, 4.5 for zip64.  We may reset this later, as
             // necessary or zip64.
 
+#if VERSION_NEEDED_BETTER
+            if (this._VersionNeeded < 10)
+                this._VersionNeeded = 10;
+
+            if (this.CompressionMethod == Ionic.Zip.CompressionMethod.Deflate && this._VersionNeeded < 20)
+                this._VersionNeeded = 20;
+
+            if (this.CompressionMethod == Ionic.Zip.CompressionMethod.Deflate && this._VersionNeeded < 21)
+                this._VersionNeeded = 21;
+
+            _presumeZip64 = (_container.Zip64 == Zip64Option.Always ||
+                             (_container.Zip64 == Zip64Option.AsNecessary && !s.CanSeek));
+
+            if (_presumeZip64 && this._VersionNeeded < 45)
+                this._VersionNeeded = 45;
+
+#if BZIP
+            if (this.CompressionMethod == Ionic.Zip.CompressionMethod.BZip2 && this._VersionNeeded < 46)
+                this._VersionNeeded = 46;
+#endif
+
+            Int16 VersionNeededToExtract = this._VersionNeeded;
+
+
+
+#else
             _presumeZip64 = (_container.Zip64 == Zip64Option.Always ||
                              (_container.Zip64 == Zip64Option.AsNecessary && !s.CanSeek));
             Int16 VersionNeededToExtract = (Int16)(_presumeZip64 ? 45 : 20);
 #if BZIP
             if (this.CompressionMethod == Ionic.Zip.CompressionMethod.BZip2)
                 VersionNeededToExtract = 46;
+#endif
 #endif
 
             // (i==4)
@@ -1703,11 +1734,18 @@ namespace Ionic.Zip
             Int16 filenameLength = (short)(_EntryHeader[26] + _EntryHeader[27] * 256);
             Int16 extraFieldLength = (short)(_EntryHeader[28] + _EntryHeader[29] * 256);
 
+
+
             if (_OutputUsesZip64.Value)
             {
                 // VersionNeededToExtract - set to 45 to indicate zip64
+#if VERSION_NEEDED_BETTER
+                _EntryHeader[4] = (byte)(_VersionNeeded & 0x00FF);
+                _EntryHeader[5] = (byte)((_VersionNeeded & 0xFF00) >> 8);
+#else
                 _EntryHeader[4] = (byte)(45 & 0x00FF);
                 _EntryHeader[5] = 0x00;
+#endif
 
                 // workitem 7924 - don't need bit 3
                 // // workitem 7917
@@ -1737,8 +1775,13 @@ namespace Ionic.Zip
             else
             {
                 // VersionNeededToExtract - reset to 20 since no zip64
+#if VERSION_NEEDED_BETTER
+                _EntryHeader[4] = (byte)(_VersionNeeded & 0x00FF);
+                _EntryHeader[5] = (byte)((_VersionNeeded & 0xFF00) >> 8);
+#else
                 _EntryHeader[4] = (byte)(20 & 0x00FF);
                 _EntryHeader[5] = 0x00;
+#endif
 
                 // CompressedSize - the correct value now
                 i = 18;
@@ -2499,6 +2542,19 @@ namespace Ionic.Zip
                     if (_InputUsesZip64) size += 8;
                     byte[] Descriptor = new byte[size];
                     input.Read(Descriptor, 0, size);
+
+                    // Write CRC32
+                    /*
+                    if((Descriptor[4] != (byte)(_Crc32 & 0x000000FF)) || (Descriptor[5] != (byte)((_Crc32 & 0x0000FF00))))
+                    {
+                        WriteStatus("different CRC32 entry {0}", this.FileName);
+                    }
+                    */
+
+                    Descriptor[4] = (byte)(_Crc32 & 0x000000FF);
+                    Descriptor[5] = (byte)((_Crc32 & 0x0000FF00) >> 8);
+                    Descriptor[6] = (byte)((_Crc32 & 0x00FF0000) >> 16);
+                    Descriptor[7] = (byte)((_Crc32 & 0xFF000000) >> 24);
 
                     if (_InputUsesZip64 && _container.UseZip64WhenSaving == Zip64Option.Never)
                     {

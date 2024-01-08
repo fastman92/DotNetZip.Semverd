@@ -215,6 +215,12 @@ namespace Ionic.Zip
                     ? DateTime.SpecifyKind(value, DateTimeKind.Local)
                     : value.ToLocalTime();
                 _Mtime = Ionic.Zip.SharedUtilities.AdjustTime_Reverse(_LastModified).ToUniversalTime();
+
+                if (_container != null)
+                {
+                    _container.ZipFile.NotifyEntryChanged();
+                }
+
                 _metadataChanged = true;
             }
         }
@@ -492,6 +498,12 @@ namespace Ionic.Zip
             _LastModified = _Mtime;
             if (!_emitUnixTimes && !_emitNtfsTimes)
                 _emitNtfsTimes = true;
+
+            if (_container != null)
+            {
+                _container.ZipFile.NotifyEntryChanged();
+            }
+
             _metadataChanged = true;
         }
 
@@ -1085,6 +1097,20 @@ namespace Ionic.Zip
         }
 
         /// <summary>
+        /// Updates _VersionNeeded property.
+        /// </summary>
+        internal void UpdateVersionNeeded()
+        {
+            _presumeZip64 = (_container.Zip64 == Zip64Option.Always ||
+                 (_container.Zip64 == Zip64Option.AsNecessary));
+            _VersionNeeded = (Int16)(_presumeZip64 ? 45 : 20);
+#if BZIP
+            if (this.CompressionMethod == Ionic.Zip.CompressionMethod.BZip2)
+                _VersionNeeded = 46;
+#endif
+        }
+
+        /// <summary>
         /// The comment attached to the ZipEntry.
         /// </summary>
         ///
@@ -1101,7 +1127,7 @@ namespace Ionic.Zip
         ///  <see cref="AlternateEncodingUsage"/>.
         /// </para>
         /// </remarks>
-        /// <seealso cref="AlternateEncoding"/>
+        /// <seealso cref="AlternateEncoding"/>c
         /// <seealso cref="AlternateEncodingUsage"/>
         public string Comment
         {
@@ -1581,6 +1607,16 @@ namespace Ionic.Zip
         public Int32 Crc
         {
             get { return _Crc32; }
+            set {
+                _Crc32 = value;
+
+                if (_container != null)
+                {
+                    _container.ZipFile.NotifyEntryChanged();
+                }
+
+                _metadataChanged = true;
+            }
         }
 
         /// <summary>
@@ -1970,7 +2006,6 @@ namespace Ionic.Zip
                 return _restreamRequiredOnSave | _metadataChanged;
             }
         }
-
 
         /// <summary>
         /// The action the library should take when extracting a file that already exists.

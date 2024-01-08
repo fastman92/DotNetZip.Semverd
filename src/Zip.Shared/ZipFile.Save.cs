@@ -144,6 +144,7 @@ namespace Ionic.Zip
                 // check if modified, before saving.
                 if (!_contentsChanged)
                 {
+                    
                     OnSaveCompleted();
                     if (Verbose) StatusMessageTextWriter.WriteLine("No save is necessary....");
                     return;
