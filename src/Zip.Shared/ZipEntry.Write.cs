@@ -255,8 +255,17 @@ namespace Ionic.Zip
                 // If reading a segmneted archive and saving to a regular archive,
                 // ZipEntry._diskNumber will be non-zero but it should be saved as
                 // zero.
-                bytes[i++] = 0;
-                bytes[i++] = 0;
+
+                if (_presumeZip64)
+                {
+                    bytes[i++] = 0xFF;
+                    bytes[i++] = 0xFF;
+                }
+                else
+                {
+                    bytes[i++] = 0;
+                    bytes[i++] = 0;
+                }
             }
 
             // internal file attrs
